@@ -44,7 +44,10 @@ export default function Room({ params }) {
   return (
     <div>
       Room {roomId}
-      <div ref={myMeeting} />
+      <div
+        ref={myMeeting}
+        className="w-[500px] h-[500px] max-h-full max-w-full"
+      />
     </div>
   );
 }
