@@ -6,8 +6,8 @@ export default function Room({ params }) {
   //   const streamRef = useRef(null);
   const { roomId } = params;
   const myMeeting = async (e) => {
-    const appId = 1628765537;
-    const serverSecret = "a208a4bf3df6e21cb911595336bdf125";
+    const appId = process.env.NEXT_PUBLIC_ZEGO_APP_ID;
+    const serverSecret = process.env.NEXT_PUBLIC_ZEGO_SERVER_ID;
     const userID = Math.floor(Math.random() * 10000) + "";
     const userName = "userName" + userID;
     const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(

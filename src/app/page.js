@@ -10,31 +10,34 @@ const server =
 
 export default function Home() {
   const router = useRouter();
-  const [roomId, setRoomId] = useState("");
-  // const zg = new ZegoExpressEngine(appID, server);
-
-  // const result = await zg.loginRoom(
-  //   roomID,
-  //   token,
-  //   { userID, userName },
-  //   { userUpdate: true }
-  // );
+  const [formValue, setFormValue] = useState({
+    roomID: "",
+  });
+  const { roomID } = formValue;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    router.push(`/room/${roomId}`);
+
+    router.push(`/Livestream/${roomID}`);
   };
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
+    <main className="flex flex-col items-center justify-between min-h-screen p-24">
       <form onSubmit={handleSubmit}>
-        <div>
+        <div className="flex flex-col gap-3 ">
           <input
             type="text"
-            placeholder="Room ID ...."
+            placeholder="Room id ...."
+            className="p-2 border"
             required
-            value={roomId}
-            onChange={(e) => setRoomId(e.target.value)}
+            name="roomId"
+            onChange={(e) =>
+              setFormValue({
+                ...formValue,
+                roomID: e.target.value,
+              })
+            }
           />
+
           <button>save</button>
         </div>
       </form>
