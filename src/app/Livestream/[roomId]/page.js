@@ -182,20 +182,13 @@ async function startPublishingStream(
       videoCodec: videoCodec,
     });
     const localVideoDiv = document.getElementById("localVideo");
-    console.log(
-      "localVideoDiv: ",
-      g,
-      streamID,
-      publishVideo,
-      videoCodec,
-      config,
-      callback
-    );
-    localStream.playVideo(publishVideo.current, {
+    console.log("localVideoDiv: ", localVideoDiv);
+
+    localStream.playVideo(localVideoDiv, {
       mirror: true,
       objectFit: "cover",
     });
-    publishVideo.current.show();
+    localVideoDiv.show();
     return true;
   } catch (err) {
     console.log("err: ", err);
@@ -214,17 +207,6 @@ async function startPublishing(
   microphoneDevicesVal,
   callback
 ) {
-  console.log(
-    "startPublishing",
-    streamID,
-    publishVideo,
-    videoCodec,
-    cameraCheckStatus,
-    cameraDevicesVal,
-    microphoneCheckStatus,
-    microphoneDevicesVal,
-    callback
-  );
   const flag = await startPublishingStream({
     zg,
     streamID,
@@ -267,6 +249,45 @@ function changeAudioDevices(zg, localStream, microphoneDevicesVal) {
   }
 }
 
+// Step5 Start Play Stream
+async function startPlayingStream(streamId, options = {}, zg) {
+  try {
+    const remoteStream = await zg.startPlayingStream(streamId, options);
+    if (zg.getVersion() < "2.17.0") {
+      this.refs.playVideo.srcObject = remoteStream;
+    } else {
+      const remoteView = zg.createRemoteStreamView(remoteStream);
+      remoteView.play("remoteVideo", {
+        objectFit: "cover",
+      });
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function startPlaying({
+  videoCheckStatus,
+  audioCheckStatus,
+  streamID,
+  zg,
+}) {
+  const flag = await startPlayingStream(
+    streamID,
+    {
+      video: videoCheckStatus,
+      audio: audioCheckStatus,
+    },
+    zg
+  );
+  if (flag) {
+    this.setState({
+      playStreamStatus: true,
+    });
+  }
+}
+
 function LiveStream({ params }) {
   console.log("params: ", params);
   const { roomId } = params;
@@ -289,6 +310,8 @@ function LiveStream({ params }) {
     remoteStream: null,
     isLogin: false,
     audioDeviceList: [],
+    videoCheckStatus: true,
+    audioCheckStatus: false,
   });
   console.log("state: ", state);
 
@@ -442,7 +465,7 @@ function LiveStream({ params }) {
           )}
         </div>
         {state.connect.connected ? (
-          <div>
+          <div className="flex flex-col gap-4 p-2">
             <div className="flex flex-col gap-4 p-2">
               <div className="flex items-center justify-center gap-2">
                 <p className="text-sm">Publish StreamID</p>
@@ -523,7 +546,7 @@ function LiveStream({ params }) {
                     startPublishing(
                       zgRef.current,
                       roomId, // streamID,
-                      publishVideo,
+                      publishVideo.current,
                       state.videoCodec,
                       state.cameraCheckStatus,
                       state.cameraDevicesVal,
@@ -538,6 +561,26 @@ function LiveStream({ params }) {
                 </button>
               </div>
             </div>
+            <div className="flex flex-col gap-4 p-2 border">
+              <div className="flex justify-between gap-2">
+                <p>Play Stream Id</p>
+                <input type="text" className="border " value={roomId}></input>
+              </div>
+              <button
+                type="button"
+                className=""
+                onClick={() => {
+                  startPlaying({
+                    videoCheckStatus: state.videoCheckStatus,
+                    audioCheckStatus: state.audioCheckStatus,
+                    streamID: roomId,
+                    zg: zgRef.current,
+                  });
+                }}
+              >
+                Start Stream
+              </button>
+            </div>
             <button type="button" className="px-4 py-2 border">
               Disconnect
             </button>
@@ -546,11 +589,16 @@ function LiveStream({ params }) {
           ""
         )}
       </div>
-      <div className="flex flex-col p-2 border w-96">
+      <div className="flex flex-col gap-4 p-2 border">
         Review
         <div>
-          <video controls ref={publishVideo} autoPlay playsInline muted></video>
-          <div id="localVideo"></div>
+          {/* <video controls ref={publishVideo} autoPlay playsInline muted></video> */}
+          <div id="localVideo" className="h-64 border w-96"></div>
+        </div>
+        Live
+        <div>
+          {/* <video controls ref={publishVideo} autoPlay playsInline muted></video> */}
+          <div id="liveVideo" className="h-64 border w-96"></div>
         </div>
       </div>
     </div>
