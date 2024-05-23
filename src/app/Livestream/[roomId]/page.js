@@ -77,51 +77,6 @@ async function CheckSystemRequire(zg, callback) {
   console.log("stateChange: ", stateChange);
   callback(stateChange);
 }
-
-// function initEvent() {
-//   zg.on("roomStateUpdate", (roomId, state) => {
-//     if (state === "CONNECTED") {
-//       // $('#roomStateSuccessSvg').css('display', 'inline-block');
-//       // $('#roomStateErrorSvg').css('display', 'none');
-//     }
-
-//     if (state === "DISCONNECTED") {
-//       // $('#roomStateSuccessSvg').css('display', 'none');
-//       // $('#roomStateErrorSvg').css('display', 'inline-block');
-//     }
-//   });
-
-//   zg.on("publisherStateUpdate", (result) => {
-//     if (result.state === "PUBLISHING") {
-//       // $('#pushlishInfo-id').text(result.streamID)
-//     } else if (result.state === "NO_PUBLISH") {
-//       // $('#pushlishInfo-id').text('')
-//     }
-//   });
-
-//   zg.on("playerStateUpdate", (result) => {
-//     if (result.state === "PLAYING") {
-//       // $('#playInfo-id').text(result.streamID)
-//     } else if (result.state === "NO_PLAY") {
-//       // $('#playInfo-id').text('')
-//     }
-//   });
-
-//   zg.on("publishQualityUpdate", (streamId, stats) => {
-//     // $('#publishResolution').text(`${stats.video.frameWidth} * ${stats.video.frameHeight}`)
-//     // $('#sendBitrate').text(parseInt(stats.video.videoBitrate) + 'kbps')
-//     // $('#sendFPS').text(parseInt(stats.video.videoFPS) + ' f/s')
-//     // $('#sendPacket').text(stats.video.videoPacketsLostRate.toFixed(1) + '%')
-//   });
-
-//   zg.on("playQualityUpdate", (streamId, stats) => {
-//     // $('#playResolution').text(`${stats.video.frameWidth} * ${stats.video.frameHeight}`)
-//     // $('#receiveBitrate').text(parseInt(stats.video.videoBitrate) + 'kbps')
-//     // $('#receiveFPS').text(parseInt(stats.video.videoFPS) + ' f/s')
-//     // $('#receivePacket').text(stats.video.videoPacketsLostRate.toFixed(1) + '%')
-//   });
-// }
-
 function destroyStream(localStream, zg) {
   localStream && zg.destroyStream(localStream);
   localStream = null;
@@ -166,15 +121,14 @@ async function loginRoomOption(state) {
   }
 }
 
-async function startPublishingStream(
-  // zg,
-  // publishVideo,
-  // videoCodec,
-  // streamId,
-  // config,
-  // callback
-  { zg, streamID, publishVideo, videoCodec, config, callback }
-) {
+async function startPublishingStream({
+  zg,
+  streamID,
+  publishVideo,
+  videoCodec,
+  config,
+  callback,
+}) {
   try {
     const localStream = await zg.createZegoStream(config);
     callback({ localStream });
@@ -182,8 +136,6 @@ async function startPublishingStream(
       videoCodec: videoCodec,
     });
     const localVideoDiv = document.getElementById("localVideo");
-    console.log("localVideoDiv: ", localVideoDiv);
-
     localStream.playVideo(localVideoDiv, {
       mirror: true,
       objectFit: "cover",
@@ -250,14 +202,23 @@ function changeAudioDevices(zg, localStream, microphoneDevicesVal) {
 }
 
 // Step5 Start Play Stream
-async function startPlayingStream(streamId, options = {}, zg) {
+async function startPlayingStream({
+  streamID,
+  options = {},
+  zg,
+  liveVideoRef,
+  callback,
+}) {
   try {
-    const remoteStream = await zg.startPlayingStream(streamId, options);
+    const remoteStream = await zg.startPlayingStream(streamID, options);
+    await callback({
+      remoteStream: remoteStream,
+    });
     if (zg.getVersion() < "2.17.0") {
-      this.refs.playVideo.srcObject = remoteStream;
+      liveVideoRef.current.playVideo.srcObject = remoteStream;
     } else {
       const remoteView = zg.createRemoteStreamView(remoteStream);
-      remoteView.play("remoteVideo", {
+      remoteView.play(liveVideoRef.current, {
         objectFit: "cover",
       });
     }
@@ -267,29 +228,101 @@ async function startPlayingStream(streamId, options = {}, zg) {
   }
 }
 
+async function stopPublishingStream(zg, streamId) {
+  zg.stopPublishingStream(streamId);
+}
+
+async function stopPlayingStream(zg, streamId) {
+  zg.stopPlayingStream(streamId);
+}
+
+function clearStream({
+  zg,
+  localStream,
+  publishVideoRef,
+  liveVideoRef,
+  remoteStream,
+  callback,
+}) {
+  localStream && zg.destroyStream(localStream);
+  publishVideoRef.current.srcObject = null;
+  remoteStream && zg.destroyStream(remoteStream);
+  liveVideoRef.current.srcObject = null;
+  callback({
+    localStream: null,
+    remoteStream: null,
+  });
+}
+
+function logoutRoom(zg, roomId) {
+  zg.logoutRoom(roomId);
+}
+
+async function stopStream({
+  zg,
+  streamID,
+  callback,
+  localStream,
+  remoteStream,
+  isLogin,
+  publishVideoRef,
+  liveVideoRef,
+}) {
+  if (!zg) {
+    return;
+  }
+  await stopPublishingStream(zg, streamID);
+  await stopPlayingStream(zg, streamID);
+  if (isLogin) {
+    await callback({
+      isLogin: false,
+    });
+    logoutRoom(streamID);
+  }
+  clearStream({
+    zg,
+    localStream,
+    publishVideoRef,
+    remoteStream,
+    liveVideoRef,
+    callback,
+  });
+  zg = null;
+  callback({
+    playStreamStatus: false,
+    publishStreamStatus: false,
+    createSuccessSvgStatus: false,
+    checkSystemRequireStatus: "",
+    audioCheckStatus: false,
+  });
+}
+
 async function startPlaying({
   videoCheckStatus,
   audioCheckStatus,
   streamID,
   zg,
+  liveVideoRef,
+  callback,
 }) {
-  const flag = await startPlayingStream(
+  const flag = await startPlayingStream({
     streamID,
-    {
+    options: {
       video: videoCheckStatus,
       audio: audioCheckStatus,
     },
-    zg
-  );
+    zg,
+    liveVideoRef,
+    callback,
+  });
   if (flag) {
-    this.setState({
+    callback({
       playStreamStatus: true,
     });
   }
 }
 
 function LiveStream({ params }) {
-  console.log("params: ", params);
   const { roomId } = params;
   const [state, setState] = useState({
     userName: "",
@@ -312,8 +345,17 @@ function LiveStream({ params }) {
     audioDeviceList: [],
     videoCheckStatus: true,
     audioCheckStatus: false,
+    numberViewer: 0,
+    sendBitrate: 0,
+    sendFPS: 0,
+    sendPacket: 0,
+    receiveBitrate: 0,
+    receiveFPS: 0,
+    receivePacket: 0,
+    frameWidth: 0,
+    frameHeight: 0,
   });
-  console.log("state: ", state);
+  console.log("state", state);
 
   const appID = process.env.NEXT_PUBLIC_ZEGO_APP_ID * 1;
   const server = process.env.NEXT_PUBLIC_ZEGO_SERVER_ID;
@@ -322,7 +364,8 @@ function LiveStream({ params }) {
   const payload = "";
 
   const zgRef = useRef(null);
-  const publishVideo = useRef(null);
+  const publishVideoRef = useRef(null);
+  const liveVideoRef = useRef(null);
 
   const handleJoinRoom = async () => {
     const zg = zgRef.current;
@@ -392,7 +435,6 @@ function LiveStream({ params }) {
       });
 
       zg.on("publisherStateUpdate", (result) => {
-        console.log("result: ", result);
         if (result.state === "PUBLISHING") {
           // $('#pushlishInfo-id').text(result.streamID)
         } else if (result.state === "NO_PUBLISH") {
@@ -409,199 +451,259 @@ function LiveStream({ params }) {
       });
 
       zg.on("publishQualityUpdate", (streamId, stats) => {
-        // $('#publishResolution').text(`${stats.video.frameWidth} * ${stats.video.frameHeight}`)
-        // $('#sendBitrate').text(parseInt(stats.video.videoBitrate) + 'kbps')
-        // $('#sendFPS').text(parseInt(stats.video.videoFPS) + ' f/s')
-        // $('#sendPacket').text(stats.video.videoPacketsLostRate.toFixed(1) + '%')
+        console.log("streamId: ", streamId);
+        setState((prev) => ({
+          ...prev,
+          frameWidth: stats.video.frameWidth,
+          frameHeight: stats.video.frameHeight,
+          videoBitrate: stats.video.videoBitrate,
+          videoFPS: stats.video.videoFPS,
+          videoPacketsLostRate: stats.video.videoPacketsLostRate,
+        }));
       });
 
       zg.on("playQualityUpdate", (streamId, stats) => {
-        // $('#playResolution').text(`${stats.video.frameWidth} * ${stats.video.frameHeight}`)
-        // $('#receiveBitrate').text(parseInt(stats.video.videoBitrate) + 'kbps')
-        // $('#receiveFPS').text(parseInt(stats.video.videoFPS) + ' f/s')
-        // $('#receivePacket').text(stats.video.videoPacketsLostRate.toFixed(1) + '%')
+        setState((prev) => ({
+          ...prev,
+          frameWidth: stats.video.frameWidth,
+          frameHeight: stats.video.frameHeight,
+          receiveBitrate: stats.video.videoBitrate,
+          receiveFPS: stats.video.videoFPS,
+          receivePacket: stats.video.videoPacketsLostRate.toFixed(1),
+        }));
       });
     });
   }, []);
 
   return (
-    <div className="flex grid-cols-2 gap-2 m-4">
-      <div className="col-span-1 p-2 border">
-        {!state.connect.connected ? (
-          <div className="flex gap-4 p-2">
-            <input
-              type="text"
-              placeholder="Username ...."
-              className="p-2 border"
-              required
-              name="username"
-              onChange={(e) =>
-                setState({
-                  ...state,
-                  userName: e.target.value,
-                })
-              }
-            />
+    <>
+      <p>Tạo phòng tream</p>
+      <div className="flex gap-2 m-4">
+        <div className="col-span-1 p-2 border">
+          {!state.connect.connected ? (
+            <div className="flex gap-4 p-2">
+              <input
+                type="text"
+                placeholder="Username ...."
+                className="p-2 border"
+                required
+                name="username"
+                onChange={(e) =>
+                  setState({
+                    ...state,
+                    userName: e.target.value,
+                  })
+                }
+              />
 
-            <button
-              className="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700"
-              onClick={handleJoinRoom}
-            >
-              Login Room
-            </button>
-          </div>
-        ) : (
-          ""
-        )}
-        <div>
-          {state.connect.connecting ? (
-            <div className="flex items-center justify-center border-gray-200 rounded-lg w-30 h-30 ">
-              <div className="px-3 py-1 text-xs font-medium leading-none text-center text-blue-800 bg-blue-200 rounded-full animate-pulse dark:bg-blue-900 dark:text-blue-200">
-                Connecting...
+              <button
+                className="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700"
+                onClick={handleJoinRoom}
+              >
+                Login Room
+              </button>
+            </div>
+          ) : (
+            ""
+          )}
+          <div>
+            {state.connect.connecting ? (
+              <div className="flex items-center justify-center border-gray-200 rounded-lg w-30 h-30 ">
+                <div className="px-3 py-1 text-xs font-medium leading-none text-center text-blue-800 bg-blue-200 rounded-full animate-pulse dark:bg-blue-900 dark:text-blue-200">
+                  Connecting...
+                </div>
               </div>
+            ) : (
+              ""
+            )}
+          </div>
+          {state.connect.connected ? (
+            <div className="flex flex-col gap-4 p-2">
+              <div className="flex flex-col gap-4 p-2">
+                <div className="flex items-center justify-center gap-2">
+                  <p className="text-sm">Publish StreamID</p>
+                  <input type="text" className="border " value={roomId}></input>
+                  <div className="flex items-center ">
+                    <input
+                      checked={state.microphoneCheckStatus}
+                      id="default-checkbox"
+                      type="checkbox"
+                      onChange={(e) => {
+                        setState({
+                          ...state,
+                          microphoneCheckStatus: e.target.checked,
+                        });
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <label
+                      for="default-checkbox"
+                      className="text-sm font-medium text-gray-900 ms-2 dark:text-gray-300"
+                    >
+                      Micro
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      checked={state.cameraCheckStatus}
+                      id="checked-checkbox"
+                      type="checkbox"
+                      onChange={(e) => {
+                        setState({
+                          ...state,
+                          cameraCheckStatus: e.target.checked,
+                        });
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <label
+                      for="checked-checkbox"
+                      className="text-sm font-medium text-gray-900 ms-2 dark:text-gray-300"
+                    >
+                      Camera
+                    </label>
+                  </div>
+                  <div className="font-12 select-wrapper">
+                    <span data-lang="MicrophoneSwitch">Microphone Switch</span>
+                    <select
+                      className="ml-5 form-control form-control-sm"
+                      name="microphoneDevicesVal"
+                      value={state.microphoneDevicesVal || ""}
+                      onChange={(e) => {
+                        changeAudioDevices(
+                          zgRef.current,
+                          state.localStream,
+                          e.target.value
+                        );
+                        setState({
+                          ...state,
+                          microphoneDevicesVal: e.target.value,
+                        });
+                      }}
+                      disabled={!state.microphoneCheckStatus}
+                    >
+                      {state.audioDeviceList.map((item) => {
+                        return (
+                          <option key={item.deviceID} value={item.deviceID}>
+                            {item.deviceName}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startPublishing(
+                        zgRef.current,
+                        roomId, // streamID,
+                        publishVideoRef,
+                        state.videoCodec,
+                        state.cameraCheckStatus,
+                        state.cameraDevicesVal,
+                        state.microphoneCheckStatus,
+                        state.microphoneDevicesVal,
+                        handleChangeValueState
+                      );
+                    }}
+                    className="p-2 border"
+                  >
+                    Start Publishing
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-4 p-2 border">
+                <div className="flex justify-between gap-2">
+                  <p>Play Stream Id</p>
+                  <input type="text" className="border " value={roomId}></input>
+                </div>
+                <button
+                  type="button"
+                  className=""
+                  onClick={() => {
+                    startPlaying({
+                      videoCheckStatus: state.videoCheckStatus,
+                      audioCheckStatus: state.audioCheckStatus,
+                      streamID: roomId,
+                      zg: zgRef.current,
+                      liveVideoRef,
+                      callback: handleChangeValueState,
+                    });
+                  }}
+                >
+                  Start Stream
+                </button>
+              </div>
+              <button
+                type="button"
+                className="px-4 py-2 border"
+                onClick={() =>
+                  stopStream({
+                    zg: zgRef.current,
+                    streamID: roomId,
+                    playStreamID: state.playStreamID,
+                    callback: handleChangeValueState,
+                    localStream: state.localStream,
+                    remoteStream: state.remoteStream,
+                    isLogin: state.isLogin,
+                    publishVideoRef,
+                    liveVideoRef,
+                  })
+                }
+              >
+                Disconnect
+              </button>
             </div>
           ) : (
             ""
           )}
         </div>
-        {state.connect.connected ? (
-          <div className="flex flex-col gap-4 p-2">
-            <div className="flex flex-col gap-4 p-2">
-              <div className="flex items-center justify-center gap-2">
-                <p className="text-sm">Publish StreamID</p>
-                <input type="text" className="border " value={roomId}></input>
-                <div className="flex items-center ">
-                  <input
-                    checked={state.microphoneCheckStatus}
-                    id="default-checkbox"
-                    type="checkbox"
-                    onChange={(e) => {
-                      setState({
-                        ...state,
-                        microphoneCheckStatus: e.target.checked,
-                      });
-                    }}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                  />
-                  <label
-                    for="default-checkbox"
-                    className="text-sm font-medium text-gray-900 ms-2 dark:text-gray-300"
-                  >
-                    Micro
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    checked={state.cameraCheckStatus}
-                    id="checked-checkbox"
-                    type="checkbox"
-                    onChange={(e) => {
-                      setState({
-                        ...state,
-                        cameraCheckStatus: e.target.checked,
-                      });
-                    }}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                  />
-                  <label
-                    for="checked-checkbox"
-                    className="text-sm font-medium text-gray-900 ms-2 dark:text-gray-300"
-                  >
-                    Camera
-                  </label>
-                </div>
-                <div className="font-12 select-wrapper">
-                  <span data-lang="MicrophoneSwitch">Microphone Switch</span>
-                  <select
-                    className="ml-5 form-control form-control-sm"
-                    name="microphoneDevicesVal"
-                    value={state.microphoneDevicesVal || ""}
-                    onChange={(e) => {
-                      changeAudioDevices(
-                        zgRef.current,
-                        state.localStream,
-                        e.target.value
-                      );
-                      setState({
-                        ...state,
-                        microphoneDevicesVal: e.target.value,
-                      });
-                    }}
-                    disabled={!state.microphoneCheckStatus}
-                  >
-                    {state.audioDeviceList.map((item) => {
-                      return (
-                        <option key={item.deviceID} value={item.deviceID}>
-                          {item.deviceName}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    startPublishing(
-                      zgRef.current,
-                      roomId, // streamID,
-                      publishVideo.current,
-                      state.videoCodec,
-                      state.cameraCheckStatus,
-                      state.cameraDevicesVal,
-                      state.microphoneCheckStatus,
-                      state.microphoneDevicesVal,
-                      handleChangeValueState
-                    );
-                  }}
-                  className="p-2 border"
-                >
-                  Start Publishing
-                </button>
-              </div>
-            </div>
-            <div className="flex flex-col gap-4 p-2 border">
-              <div className="flex justify-between gap-2">
-                <p>Play Stream Id</p>
-                <input type="text" className="border " value={roomId}></input>
-              </div>
-              <button
-                type="button"
-                className=""
-                onClick={() => {
-                  startPlaying({
-                    videoCheckStatus: state.videoCheckStatus,
-                    audioCheckStatus: state.audioCheckStatus,
-                    streamID: roomId,
-                    zg: zgRef.current,
-                  });
-                }}
-              >
-                Start Stream
-              </button>
-            </div>
-            <button type="button" className="px-4 py-2 border">
-              Disconnect
-            </button>
+        <div className="flex flex-col gap-4 p-2 border">
+          Review
+          <div>
+            <div
+              id="localVideo"
+              ref={publishVideoRef}
+              className="h-64 border w-96"
+            ></div>
           </div>
-        ) : (
-          ""
-        )}
-      </div>
-      <div className="flex flex-col gap-4 p-2 border">
-        Review
-        <div>
-          {/* <video controls ref={publishVideo} autoPlay playsInline muted></video> */}
-          <div id="localVideo" className="h-64 border w-96"></div>
+          Live
+          <div>
+            <div
+              id="liveVideo"
+              ref={liveVideoRef}
+              className="h-64 border w-96"
+            ></div>
+          </div>
         </div>
-        Live
-        <div>
-          {/* <video controls ref={publishVideo} autoPlay playsInline muted></video> */}
-          <div id="liveVideo" className="h-64 border w-96"></div>
+        <div className="flex flex-col gap-4 p-2 border">
+          Info live stream
+          <div className="flex flex-col gap-4">
+            <div className="p-2 border">
+              <p>Review</p>
+
+              <p>
+                Frame : {state.frameWidth} * {state.frameHeight}
+              </p>
+              <p>Bitrate : {state.videoBitrate}</p>
+              <p>FPS : {state.videoFPS}</p>
+              <p>PacketsLostRate : {state.videoPacketsLostRate}</p>
+            </div>
+            <div className="p-2 border">
+              <p>Live</p>
+              <p>
+                Frame : {state.frameWidth} * {state.frameHeight}
+              </p>
+              <p>Bitrate : {state.receiveBitrate}</p>
+              <p>FPS : {state.receiveFPS}</p>
+              <p>Receive Packet : {state.receivePacket}</p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 export default LiveStream;
