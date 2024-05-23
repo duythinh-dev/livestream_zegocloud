@@ -11,19 +11,43 @@ const server =
 export default function Home() {
   const router = useRouter();
   const [formValue, setFormValue] = useState({
-    roomID: "",
+    roomStream: "",
+    roomView: "",
   });
-  const { roomID } = formValue;
+  const { roomStream, roomView } = formValue;
 
-  const handleSubmit = (e) => {
+  const handleCreateRoomStream = (e) => {
     e.preventDefault();
+    router.push(`/Livestream/${roomStream}`);
+  };
 
-    router.push(`/Livestream/${roomID}`);
+  const handleJoinRoomStream = (e) => {
+    e.preventDefault();
+    router.push(`/view/${roomView}`);
   };
   return (
     <main className="flex flex-col items-center justify-between min-h-screen p-24">
-      <form onSubmit={handleSubmit}>
-        <div className="flex flex-col gap-3 ">
+      <div className="flex gap-3 ">
+        <div className="flex flex-col gap-3">
+          <b>Tạo stream</b>
+          <input
+            type="text"
+            placeholder="Room id ...."
+            className="p-2 border"
+            required
+            name="roomStream"
+            onChange={(e) =>
+              setFormValue({
+                ...formValue,
+                roomStream: e.target.value,
+              })
+            }
+          />
+
+          <button onClick={handleCreateRoomStream}>Tạo</button>
+        </div>
+        <div className="flex flex-col gap-3">
+          <b>Xem stream</b>
           <input
             type="text"
             placeholder="Room id ...."
@@ -33,14 +57,14 @@ export default function Home() {
             onChange={(e) =>
               setFormValue({
                 ...formValue,
-                roomID: e.target.value,
+                roomView: e.target.value,
               })
             }
           />
 
-          <button>save</button>
+          <button onClick={handleJoinRoomStream}>Vào</button>
         </div>
-      </form>
+      </div>
     </main>
   );
 }
