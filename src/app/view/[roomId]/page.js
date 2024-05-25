@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { generateToken04 } from "../../../../server/zegoServerAssistant";
+import ReactPlayer from "react-player";
 
 // Bước 1: Kiểm tra yêu cầu hệ thống
 async function checkSystemRequirements(zg) {
@@ -298,7 +299,7 @@ function LiveStream({ params }) {
 
       CheckSystemRequire(zg, handleChangeValueState);
       zg.on("roomStateUpdate", (roomId, state) => {
-        console.log("Trạng thái: ", state);
+        console.log("Trạng thái: ", roomId, state);
         if (state === "CONNECTING") {
           setState((prev) => ({
             ...prev,
@@ -510,6 +511,17 @@ function LiveStream({ params }) {
               className="h-64 border w-96"
             ></div>
           </div>
+          {state.playStreamStatus ? (
+            <ReactPlayer
+              url={`http://play-ws1.copbeo.com/live/${roomId}.mp4`}
+              width="640"
+              height="360"
+              autoPlay
+              controls
+            />
+          ) : (
+            ""
+          )}
         </div>
         <div className="flex flex-col gap-4 p-2 border">
           Thông tin luồng trực tiếp

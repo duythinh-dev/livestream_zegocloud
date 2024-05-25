@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 // import { ZegoExpressEngine } from "zego-express-engine-webrtc";
 import { generateToken04 } from "../../../../server/zegoServerAssistant";
+import ReactPlayer from "react-player";
 
 // Step1 Check system requirements
 async function checkSystemRequirements(zg) {
@@ -41,7 +42,6 @@ async function enumDevices(zg) {
       if (!item.deviceName) {
         item.deviceName = "microphone" + index;
       }
-      console.log("microphone: " + item.deviceName);
       return item;
     });
   audioDeviceList.push({ deviceID: 0, deviceName: "禁止" });
@@ -51,11 +51,9 @@ async function enumDevices(zg) {
       if (!item.deviceName) {
         item.deviceName = "camera" + index;
       }
-      console.log("camera: " + item.deviceName);
       return item;
     });
   videoDeviceList.push({ deviceID: 0, deviceName: "禁止" });
-  console.log("audioDeviceList", audioDeviceList);
   return {
     videoDeviceList,
     audioDeviceList,
@@ -74,7 +72,6 @@ async function CheckSystemRequire(zg, callback) {
   } else {
     stateChange.checkSystemRequireStatus = "ERROR";
   }
-  console.log("stateChange: ", stateChange);
   callback(stateChange);
 }
 function destroyStream(localStream, zg) {
@@ -136,11 +133,11 @@ async function startPublishingStream({
       videoCodec: videoCodec,
     });
     const localVideoDiv = document.getElementById("localVideo");
-    localStream.playVideo(localVideoDiv, {
+    localStream.playVideo(publishVideo.current, {
       mirror: true,
       objectFit: "cover",
     });
-    localVideoDiv.show();
+    publishVideo.current.show();
     return true;
   } catch (err) {
     console.log("err: ", err);
@@ -194,7 +191,6 @@ function changeAudioDevices(zg, localStream, microphoneDevicesVal) {
   const isMicrophoneMuted = zg.isMicrophoneMuted();
   if (microphoneDevicesVal == "0" && !isMicrophoneMuted) {
     zg.muteMicrophone(true); //Turn off the microphone
-    console.log("关闭");
   } else {
     zg.muteMicrophone(false);
     zg.useAudioDevice(localStream, microphoneDevicesVal);
@@ -210,9 +206,18 @@ async function startPlayingStream({
   callback,
 }) {
   try {
-    const remoteStream = await zg.startPlayingStream(streamID, options);
+    let stId = "";
+    const remoteStream = await zg
+      .startPlayingStream(streamID, options)
+      .then((e) => {
+        stId = e.id;
+        return e;
+      });
+
+    console.log("remoteStream: ", remoteStream, stId);
     await callback({
       remoteStream: remoteStream,
+      streamIDStart: stId,
     });
     if (zg.getVersion() < "2.17.0") {
       liveVideoRef.current.playVideo.srcObject = remoteStream;
@@ -354,9 +359,9 @@ function LiveStream({ params }) {
     receivePacket: 0,
     frameWidth: 0,
     frameHeight: 0,
+    streamIDStart: "",
   });
-  console.log("state", state);
-
+  console.log("state.streamIDStart", state.streamIDStart);
   const appID = process.env.NEXT_PUBLIC_ZEGO_APP_ID * 1;
   const server = process.env.NEXT_PUBLIC_ZEGO_SERVER_ID;
   const userID = Math.floor(Math.random() * 10000) + "";
@@ -402,7 +407,7 @@ function LiveStream({ params }) {
 
       CheckSystemRequire(zg, handleChangeValueState);
       zg.on("roomStateUpdate", (roomId, state) => {
-        console.log("state: ", state);
+        console.log("roomStateUpdate: ", roomId, state);
         if (state === "CONNECTING") {
           setState((prev) => ({
             ...prev,
@@ -435,6 +440,7 @@ function LiveStream({ params }) {
       });
 
       zg.on("publisherStateUpdate", (result) => {
+        console.log("publisherStateUpdate: ", result);
         if (result.state === "PUBLISHING") {
           // $('#pushlishInfo-id').text(result.streamID)
         } else if (result.state === "NO_PUBLISH") {
@@ -443,6 +449,7 @@ function LiveStream({ params }) {
       });
 
       zg.on("playerStateUpdate", (result) => {
+        console.log("playerStateUpdate: ", result);
         if (result.state === "PLAYING") {
           // $('#playInfo-id').text(result.streamID)
         } else if (result.state === "NO_PLAY") {
@@ -451,7 +458,6 @@ function LiveStream({ params }) {
       });
 
       zg.on("publishQualityUpdate", (streamId, stats) => {
-        console.log("streamId: ", streamId);
         setState((prev) => ({
           ...prev,
           frameWidth: stats.video.frameWidth,
@@ -461,8 +467,11 @@ function LiveStream({ params }) {
           videoPacketsLostRate: stats.video.videoPacketsLostRate,
         }));
       });
-
+      zg.on("onMediaInfoUpdate", (mediaInfo) => {
+        console.log("onMediaInfoUpdate ", mediaInfo);
+      });
       zg.on("playQualityUpdate", (streamId, stats) => {
+        console.log("playQualityUpdate: ", streamId, stats);
         setState((prev) => ({
           ...prev,
           frameWidth: stats.video.frameWidth,
@@ -676,6 +685,19 @@ function LiveStream({ params }) {
               ref={liveVideoRef}
               className="h-64 border w-96"
             ></div>
+          </div>
+          <div>
+            {state.playStreamStatus ? (
+              <ReactPlayer
+                url={`http://play-ws1.copbeo.com/live/${roomId}.mp4`}
+                width="640"
+                height="360"
+                autoPlay
+                controls
+              />
+            ) : (
+              ""
+            )}
           </div>
         </div>
         <div className="flex flex-col gap-4 p-2 border">
