@@ -15,7 +15,9 @@
     "react": "^18",
     "react-dom": "^18",
     "react-player": "^2.16.0",
-    "zego-express-engine-webrtc": "^3.4.0"
+    "zego-express-engine-webrtc": "^3.4.0",
+    "md5": "^2.3.0",
+    "moment": "^2.30.1"
   },
   "devDependencies": {
     "eslint": "^8",
