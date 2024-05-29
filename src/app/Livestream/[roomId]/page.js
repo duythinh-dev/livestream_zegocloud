@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 // import { ZegoExpressEngine } from "zego-express-engine-webrtc";
 import { generateToken04 } from "../../../../server/zegoServerAssistant";
 import ReactPlayer from "react-player";
+import moment from "moment";
+import md5 from "md5";
 
 // Step1 Check system requirements
 async function checkSystemRequirements(zg) {
@@ -360,6 +362,7 @@ function LiveStream({ params }) {
     frameWidth: 0,
     frameHeight: 0,
     streamIDStart: "",
+    urlServer: "",
   });
   console.log("state.streamIDStart", state.streamIDStart);
   const appID = process.env.NEXT_PUBLIC_ZEGO_APP_ID * 1;
@@ -442,6 +445,17 @@ function LiveStream({ params }) {
       zg.on("publisherStateUpdate", (result) => {
         console.log("publisherStateUpdate: ", result);
         if (result.state === "PUBLISHING") {
+          const num = moment().add(3, "hours").unix().toString(16);
+          const md5Hash = md5(
+            num + `/live/${roomId}` + process.env.NEXT_PUBLIC_PRIMARY_KEY
+          );
+
+          const targetURL = `${process.env.NEXT_PUBLIC_URL_SERVER}${roomId}?wsSecret=${md5Hash}&wsABStime=${num}`;
+          setState((prev) => ({
+            ...prev,
+
+            urlServer: targetURL,
+          }));
           // $('#pushlishInfo-id').text(result.streamID)
         } else if (result.state === "NO_PUBLISH") {
           // $('#pushlishInfo-id').text('')
@@ -622,6 +636,7 @@ function LiveStream({ params }) {
                     Start Publishing
                   </button>
                 </div>
+                <div>URL server: {state.urlServer}</div>
               </div>
               <div className="flex flex-col gap-4 p-2 border">
                 <div className="flex justify-between gap-2">
