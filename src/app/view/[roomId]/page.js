@@ -219,8 +219,16 @@ async function startPlaying({
   }
 }
 
+async function sendBroadcastMessage({ room, message, zg, callback }) {
+  zg.sendBroadcastMessage(room, message).then((e) => {
+    callback(message);
+  });
+}
 function LiveStream({ params }) {
   const { roomId } = params;
+  const [message, setMessage] = useState("");
+  const [chats, setChats] = useState([]);
+
   const [state, setState] = useState({
     userName: "",
     connectStatus: "DISCONNECTED",
@@ -264,6 +272,17 @@ function LiveStream({ params }) {
   const publishVideoRef = useRef(null);
   const liveVideoRef = useRef(null);
 
+  const sendMessage = () => {
+    sendBroadcastMessage({
+      message,
+      room: roomId,
+      zg: zgRef.current,
+      callback: (message) => {
+        setChats([...chats, { name: state.userName, message }]);
+      },
+    });
+    setMessage("");
+  };
   const handleJoinRoom = async () => {
     const zg = zgRef.current;
     const userNameJoin = state.userName + "_" + userID;
@@ -356,7 +375,15 @@ function LiveStream({ params }) {
           videoPacketsLostRate: stats.video.videoPacketsLostRate,
         }));
       });
-
+      zg.on("IMRecvBroadcastMessage", (roomID, messageList) => {
+        setChats((prev) => [
+          ...prev,
+          ...messageList.map((item) => ({
+            message: item.message,
+            name: item.fromUser.userName,
+          })),
+        ]);
+      });
       zg.on("playQualityUpdate", (streamId, stats) => {
         setState((prev) => ({
           ...prev,
@@ -497,6 +524,24 @@ function LiveStream({ params }) {
               >
                 Ngắt kết nối
               </button>
+              <div>
+                <div>Message</div>
+                <input
+                  type="text"
+                  className="border "
+                  onChange={(e) => setMessage(e.target.value)}
+                ></input>
+                <button type="button" onClick={sendMessage}>
+                  Send
+                </button>
+                <div>
+                  {chats.map((ch) => (
+                    <div className="p-2 border">
+                      {ch.name}: {ch.message}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             ""

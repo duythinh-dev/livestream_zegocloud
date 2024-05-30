@@ -206,6 +206,7 @@ async function startPlayingStream({
   zg,
   liveVideoRef,
   callback,
+  remoteStreamRef,
 }) {
   try {
     let stId = "";
@@ -215,7 +216,7 @@ async function startPlayingStream({
         stId = e.id;
         return e;
       });
-
+    remoteStreamRef.current = remoteStream;
     console.log("remoteStream: ", remoteStream, stId);
     await callback({
       remoteStream: remoteStream,
@@ -236,10 +237,12 @@ async function startPlayingStream({
 }
 
 async function stopPublishingStream(zg, streamId) {
+  console.log("zg, streamId: ", zg, streamId);
   zg.stopPublishingStream(streamId);
 }
 
 async function stopPlayingStream(zg, streamId) {
+  console.log("zg, streamId: ", zg, streamId);
   zg.stopPlayingStream(streamId);
 }
 
@@ -250,10 +253,13 @@ function clearStream({
   liveVideoRef,
   remoteStream,
   callback,
+  remoteStreamRef,
 }) {
+  console.log("localStream: ", localStream, remoteStreamRef.current);
   localStream && zg.destroyStream(localStream);
   publishVideoRef.current.srcObject = null;
-  remoteStream && zg.destroyStream(remoteStream);
+  remoteStreamRef.current && zg.destroyStream(remoteStreamRef.current);
+  remoteStreamRef.current = null;
   liveVideoRef.current.srcObject = null;
   callback({
     localStream: null,
@@ -274,6 +280,7 @@ async function stopStream({
   isLogin,
   publishVideoRef,
   liveVideoRef,
+  remoteStreamRef,
 }) {
   if (!zg) {
     return;
@@ -293,6 +300,7 @@ async function stopStream({
     remoteStream,
     liveVideoRef,
     callback,
+    remoteStreamRef,
   });
   zg = null;
   callback({
@@ -311,6 +319,7 @@ async function startPlaying({
   zg,
   liveVideoRef,
   callback,
+  remoteStreamRef,
 }) {
   const flag = await startPlayingStream({
     streamID,
@@ -321,6 +330,7 @@ async function startPlaying({
     zg,
     liveVideoRef,
     callback,
+    remoteStreamRef,
   });
   if (flag) {
     callback({
@@ -329,8 +339,15 @@ async function startPlaying({
   }
 }
 
+async function sendBroadcastMessage({ room, message, zg, callback }) {
+  zg.sendBroadcastMessage(room, message).then((e) => {
+    callback(message);
+  });
+}
+
 function LiveStream({ params }) {
   const { roomId } = params;
+  const [chats, setChats] = useState([]);
   const [state, setState] = useState({
     userName: "",
     connectStatus: "DISCONNECTED",
@@ -364,7 +381,9 @@ function LiveStream({ params }) {
     streamIDStart: "",
     urlServer: "",
   });
-  console.log("state.streamIDStart", state.streamIDStart);
+  const [urlx, setUrlx] = useState("");
+  const [message, setMessage] = useState("");
+  console.log("state.streamIDStart", state.urlServer);
   const appID = process.env.NEXT_PUBLIC_ZEGO_APP_ID * 1;
   const server = process.env.NEXT_PUBLIC_ZEGO_SERVER_ID;
   const userID = Math.floor(Math.random() * 10000) + "";
@@ -372,9 +391,21 @@ function LiveStream({ params }) {
   const payload = "";
 
   const zgRef = useRef(null);
+  const remoteStreamRef = useRef(null);
   const publishVideoRef = useRef(null);
   const liveVideoRef = useRef(null);
 
+  const sendMessage = () => {
+    sendBroadcastMessage({
+      message,
+      room: roomId,
+      zg: zgRef.current,
+      callback: (message) => {
+        setChats([...chats, { name: state.userName, message }]);
+      },
+    });
+    setMessage("");
+  };
   const handleJoinRoom = async () => {
     const zg = zgRef.current;
     const userNameJoin = state.userName + "_" + userID;
@@ -407,6 +438,13 @@ function LiveStream({ params }) {
     import("zego-express-engine-webrtc").then(({ ZegoExpressEngine }) => {
       const zg = new ZegoExpressEngine(appID, server);
       zgRef.current = zg;
+      const num = moment().add(3, "hours").unix().toString(16);
+      const md5Hash = md5(
+        num + `/live/${roomId}` + process.env.NEXT_PUBLIC_PRIMARY_KEY
+      );
+      const targetURL = `${process.env.NEXT_PUBLIC_URL_SERVER}${roomId}?wsSecret=${md5Hash}&wsABStime=${num}`;
+      console.log("targetURL: ", targetURL);
+      setUrlx(targetURL);
 
       CheckSystemRequire(zg, handleChangeValueState);
       zg.on("roomStateUpdate", (roomId, state) => {
@@ -442,20 +480,19 @@ function LiveStream({ params }) {
         }
       });
 
+      zg.on("IMRecvBroadcastMessage", (roomID, messageList) => {
+        console.log("Broadcast message received.", messageList, roomID);
+        setChats((prev) => [
+          ...prev,
+          ...messageList.map((item) => ({
+            message: item.message,
+            name: item.fromUser.userName,
+          })),
+        ]);
+      });
+
       zg.on("publisherStateUpdate", (result) => {
-        console.log("publisherStateUpdate: ", result);
         if (result.state === "PUBLISHING") {
-          const num = moment().add(3, "hours").unix().toString(16);
-          const md5Hash = md5(
-            num + `/live/${roomId}` + process.env.NEXT_PUBLIC_PRIMARY_KEY
-          );
-
-          const targetURL = `${process.env.NEXT_PUBLIC_URL_SERVER}${roomId}?wsSecret=${md5Hash}&wsABStime=${num}`;
-          setState((prev) => ({
-            ...prev,
-
-            urlServer: targetURL,
-          }));
           // $('#pushlishInfo-id').text(result.streamID)
         } else if (result.state === "NO_PUBLISH") {
           // $('#pushlishInfo-id').text('')
@@ -463,7 +500,6 @@ function LiveStream({ params }) {
       });
 
       zg.on("playerStateUpdate", (result) => {
-        console.log("playerStateUpdate: ", result);
         if (result.state === "PLAYING") {
           // $('#playInfo-id').text(result.streamID)
         } else if (result.state === "NO_PLAY") {
@@ -636,7 +672,11 @@ function LiveStream({ params }) {
                     Start Publishing
                   </button>
                 </div>
-                <div>URL server: {state.urlServer}</div>
+                <div>URL server: {urlx}</div>
+                <div>
+                  URL server:{" "}
+                  {`http://play-ws1.copbeo.com/live/${roomId}/playlist.m3u8`}
+                </div>
               </div>
               <div className="flex flex-col gap-4 p-2 border">
                 <div className="flex justify-between gap-2">
@@ -654,6 +694,7 @@ function LiveStream({ params }) {
                       zg: zgRef.current,
                       liveVideoRef,
                       callback: handleChangeValueState,
+                      remoteStreamRef,
                     });
                   }}
                 >
@@ -674,6 +715,7 @@ function LiveStream({ params }) {
                     isLogin: state.isLogin,
                     publishVideoRef,
                     liveVideoRef,
+                    remoteStreamRef,
                   })
                 }
               >
@@ -683,6 +725,24 @@ function LiveStream({ params }) {
           ) : (
             ""
           )}
+          <div>
+            <div>Message</div>
+            <input
+              type="text"
+              className="border "
+              onChange={(e) => setMessage(e.target.value)}
+            ></input>
+            <button type="button" onClick={sendMessage}>
+              Send
+            </button>
+            <div>
+              {chats.map((ch) => (
+                <div className="p-2 border">
+                  {ch.name}: {ch.message}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="flex flex-col gap-4 p-2 border">
           Review
@@ -704,7 +764,7 @@ function LiveStream({ params }) {
           <div>
             {state.playStreamStatus ? (
               <ReactPlayer
-                url={`http://play-ws1.copbeo.com/live/${roomId}.mp4`}
+                url={`http://play-ws1.copbeo.com/live/${roomId}/playlist.m3u8`}
                 width="640"
                 height="360"
                 autoPlay
